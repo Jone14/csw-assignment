@@ -10,14 +10,12 @@ import org.w3c.dom.Element;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.*;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -27,6 +25,7 @@ import java.util.Set;
 public final class ConverterFactory {
     public static String jsonFilePath;
     public static String xmlFIlePath;
+
     /**
      * You should implement this method having it return your version of
      * {@link com.csw.converters.XMLJSONConverterI}.
@@ -34,20 +33,21 @@ public final class ConverterFactory {
      * @return {@link com.csw.converters.XMLJSONConverterI} implementation you created.
      */
     public static final XMLJSONConverterI createXMLJSONConverter() {
-       // Todo: Implement this method please.
 
         //throw new UnsupportedOperationException("Please implement me!");
         return new XMLJSONConverterI(){
 
             @Override
-            public void convertJSONtoXML(File jsonFile, File xmlFile) throws IOException {
-                System.out.println("Inside convertJSONtoXML !!! line no 34");
+            public void convertJSONtoXML(File jsonFile, File xmlFile) {
 
                 //Method to read JSON File
                 Object obj = readJsonFile(jsonFile);
 
+                //Method to construct root element
+                Document document  = constructRootXmlElement(obj);
+
                 //Method to Construct XML
-                Document document = constructXml(obj);
+                constructXml( obj, document, null);
 
                 //Method to Write XML
                 writeXmlFile(xmlFile, document);
@@ -87,13 +87,13 @@ public final class ConverterFactory {
             DocumentBuilderFactory documentFactory = DocumentBuilderFactory.newInstance();
             DocumentBuilder documentBuilder = documentFactory.newDocumentBuilder();
             document = documentBuilder.newDocument();
-            Element rootElement = null;
+            Element rootElement;
 
             if(obj instanceof JSONObject){
                 rootElement = document.createElement("object");
 
             }else if(obj instanceof JSONArray){
-                rootElement = document.createElement("object");
+                rootElement = document.createElement("array");
             }else{
                 System.out.println("The First Json Element can be of Array or an Object");
                 throw new Exception("Cannot Convert!");
@@ -105,89 +105,147 @@ public final class ConverterFactory {
         return document;
     }
 
-    public static Document constructXml(Object obj){
+    private static Element buildXmlElement(String key, Document document, String tagName) {
+        Element objectElement = document.createElement(tagName);
+        if(key != null){
+            Attr attr = document.createAttribute("name");
+            attr.setValue(key);
+            objectElement.setAttributeNode(attr);
+        }
+        return objectElement;
+    }
 
-        Document document  = constructRootXmlElement(obj);
+    private static Element constructXmlFOrArray(Object obj, Document document) {
+        Element element = null;
+        if(obj instanceof JSONArray){
+            element = constructXmlEleForArray(obj, document,"array");
+        } else if(obj instanceof Long || obj instanceof Integer) {
+            element = constructXmlEleForArray(obj, document,"number");
+        }else  if(obj instanceof String) {
+            element = constructXmlEleForArray(obj, document,"string");
+        }else  if(obj == null ) {
+            element = constructXmlEleForArray(obj, document,"null");
+        }else  if(obj  instanceof Boolean) {
+            element = constructXmlEleForArray(obj, document,"boolean");
+        }else  if(obj  instanceof Object) {
+            element = constructXmlEleForArray(obj, document,"object");
+        }
+        return element;
+    }
+
+    public static Element constructXmlEleForArray(Object obj, Document document, String tagName){
+        Element ele = document.createElement(tagName);
+        ele.appendChild(document.createTextNode(obj.toString()));
+        return ele;
+    }
+
+
+    public static Element buildXML(Object k, JSONObject jsonObject, Document document){
+
+        Element element = null;
+        if( jsonObject.get(k)  instanceof Long || jsonObject.get(k)  instanceof Integer) {
+            element = createXmlObjElement(k, jsonObject, document,"number");
+        }else  if(jsonObject.get(k)  instanceof String) {
+            element = createXmlObjElement(k, jsonObject, document,"string");
+        }else  if(jsonObject.get(k) == null ) {
+            element = createXmlObjElement(k, jsonObject, document,"null");
+        }else  if(jsonObject.get(k)  instanceof Boolean) {
+            element = createXmlObjElement(k, jsonObject, document,"boolean");
+        }else  if(jsonObject.get(k)  instanceof Object) {
+            element = createXmlObjElement(k, jsonObject, document,"object");
+        }
+        return element;
+    }
+
+    public static Element createXmlObjElement(Object key, JSONObject jsonObject, Document document, String tagName){
+        //System.out.println("Key ::"+ key);
+        //System.out.println("Value ::"+ jsonObject.get(key));
+        //System.out.println("ValueType ::"+tagName);
+
+        Element ele = document.createElement(tagName);
+        Attr attr = document.createAttribute("name");
+        attr.setValue(key.toString());
+        ele.setAttributeNode(attr);
+        if(jsonObject.get(key)!=null){
+            ele.appendChild(document.createTextNode(jsonObject.get(key).toString()));
+        }
+        return ele;
+    }
+
+    public static void constructXml(Object obj, Document document, Element parentEle){
+
         try{
             JSONObject jsonObject;
+            Element element;
             if(obj instanceof JSONObject){
                 jsonObject = (JSONObject) obj;
-                Set<?> s =jsonObject.keySet();
-                Iterator<?> i = s.iterator();
-                do{
-                    String k = i.next().toString();
-                    System.out.println(k);
-                    buildXML(k, jsonObject, document);
-                }while(i.hasNext());
+                Set<?> keySet =jsonObject.keySet();
+                for (Object o : keySet) {
+                    String key = o.toString();
+                    //System.out.println(key);
+                    if (jsonObject.get(key) instanceof JSONObject) {
+                        element = buildXmlElement(key,document, "object");
+                        if(parentEle != null){
+                            parentEle.appendChild(element);
+                        }else{
+                            document.getDocumentElement().appendChild(element);
+                        }
+                        constructXml(jsonObject.get(key), document, element);
+                    }else if(jsonObject.get(key) instanceof JSONArray){
+                        element = buildXmlElement(key,document, "array");
+                        if(parentEle != null){
+                            parentEle.appendChild(element);
+                        }else {
+                            document.getDocumentElement().appendChild(element);
+                        }
+                        constructXml(jsonObject.get(key), document, element);
+                    }else{
+                        element = buildXML(o, jsonObject, document);
+                        if(parentEle != null){
+                            parentEle.appendChild(element);
+                        }else{
+                            document.getDocumentElement().appendChild(element);
+                        }
+                    }
+                }
             }else if(obj instanceof JSONArray){
                 JSONArray jsonArray = (JSONArray) obj;
-                System.out.println(jsonArray);
-                for (Object o : jsonArray) {
-                    System.out.println("Array Element ::"+ o);
-                    document = constructXmlFOrArray(o, document);
+                //System.out.println(jsonArray);
+                for (Object ob : jsonArray) {
+                    //System.out.println("Array Element ::"+ ob);
+                    if(ob instanceof JSONObject){
+                        element = buildXmlElement(null,document, "object");
+                        if(parentEle != null){
+                            parentEle.appendChild(element);
+                        }else {
+                            document.getDocumentElement().appendChild(element);
+                        }
+                        constructXml(ob,document, element);
+                    }else if (ob instanceof JSONArray){
+                        element = buildXmlElement(null,document, "array");
+                        if(parentEle != null){
+                            parentEle.appendChild(element);
+                        }else {
+                            document.getDocumentElement().appendChild(element);
+                        }
+                        constructXml(ob,document, element);
+                    }else {
+                        element = constructXmlFOrArray(ob,document);
+                        if(parentEle != null){
+                            parentEle.appendChild(element);
+                        }else {
+                            document.getDocumentElement().appendChild(element);
+                        }
+                    }
                 }
             }
         }catch(Exception exp){
             System.out.println("Stack Trace:: "+ exp);
         }
 
-        return document;
-    }
-
-    private static Document constructXmlFOrArray(Object obj, Document document) {
-        if(obj instanceof JSONArray){
-            constructXmlElementForArray(obj, document,"array");
-        } else if(obj instanceof Long || obj instanceof Integer) {
-            constructXmlElementForArray(obj, document,"number");
-        }else  if(obj instanceof String) {
-            constructXmlElementForArray(obj, document,"string");
-        }else  if(obj == null ) {
-            constructXmlElementForArray(obj, document,"null");
-        }else  if(obj  instanceof Boolean) {
-            constructXmlElementForArray(obj, document,"boolean");
-        }else  if(obj  instanceof Object) {
-            constructXmlElementForArray(obj, document,"object");
-        }
-        return null;
-    }
-
-    public static void constructXmlElementForArray(Object obj, Document document, String tagName){
-        Element ele = document.createElement(tagName);
-        ele.appendChild(document.createTextNode(obj.toString()));
-        document.getDocumentElement().appendChild(ele);
-    }
-
-    public static void constructXmlElement(Object key, JSONObject jsonObject, Document document, String tagName){
-        System.out.println("Key ::"+ key);
-        System.out.println("Value ::"+ jsonObject.get(key));
-        System.out.println("ValueType ::"+tagName);
-
-        Element ele = document.createElement(tagName);
-        Attr attr = document.createAttribute("name");
-        attr.setValue(key.toString());
-        ele.setAttributeNode(attr);
-        ele.appendChild(document.createTextNode(jsonObject.get(key).toString()));
-        document.getDocumentElement().appendChild(ele);
     }
 
 
-    public static void buildXML(Object k, JSONObject jsonObject, Document document){
-
-
-       if(jsonObject.get(k) instanceof JSONArray){
-           constructXmlElement(k, jsonObject, document,"array");
-        } else if( jsonObject.get(k)  instanceof Long || jsonObject.get(k)  instanceof Integer) {
-           constructXmlElement(k, jsonObject, document,"number");
-        }else  if(jsonObject.get(k)  instanceof String) {
-           constructXmlElement(k, jsonObject, document,"string");
-        }else  if(jsonObject.get(k) == null ) {
-           constructXmlElement(k, jsonObject, document,"null");
-        }else  if(jsonObject.get(k)  instanceof Boolean) {
-           constructXmlElement(k, jsonObject, document,"boolean");
-        }else  if(jsonObject.get(k)  instanceof Object) {
-           constructXmlElement(k, jsonObject, document,"object");
-        }
-    }
 
     public static Object readJsonFile(File jsonFile){
 
@@ -221,12 +279,12 @@ public final class ConverterFactory {
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
             DOMSource domSource = new DOMSource(document);
             StreamResult streamResult = new StreamResult(xmlFile);
-            StreamResult streamResult1 = new StreamResult(System.out);
+           // StreamResult streamResult1 = new StreamResult(System.out);
 
             transformer.transform(domSource, streamResult);
-            transformer.transform(domSource, streamResult1);
+            //transformer.transform(domSource, streamResult1);
 
-            System.out.println("Done creating XML File");
+            //System.out.println("Done creating XML File");
         } catch (TransformerException e) {
             e.printStackTrace();
         }
