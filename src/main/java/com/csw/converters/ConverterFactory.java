@@ -58,9 +58,14 @@ public final class ConverterFactory {
     //public
     public static void main(String[] args) {
 
-         Scanner scanner = new Scanner(System.in);
-         String jsonFilePath = scanner.next();
-         String xmlFIlePath = scanner.next();
+        if (args.length > 0) {
+                jsonFilePath = args[0];
+                xmlFIlePath = args[1];
+        }else{
+            System.out.println("No command line arguments found, Please re run with arguments");
+
+        }
+
 
        //jsonFilePath = "D:\\jonej\\Documents\\csw-assignment\\test-data\\1.json";
        //xmlFIlePath = "D:\\jonej\\Documents\\csw-assignment\\output\\1.xml";
